@@ -7,6 +7,11 @@ ENT.AdminOnly = true
 ENT.isVendor = true
 ENT.bNoPersist = true
 
+
+if CLIENT then
+	ENT.targetedPlayer = NULL
+end
+
 function ENT:SetupDataTables()
 	self:NetworkVar("Bool", 0, "NoBubble")
 	self:NetworkVar("String", 0, "DisplayName")
@@ -39,6 +44,8 @@ function ENT:Initialize()
 			physObj:Sleep()
 		end
 	end
+
+
 
 	timer.Simple(1, function()
 		if (IsValid(self)) then
@@ -271,6 +278,8 @@ else
 		self.bubble:SetModelScale(0.6, 0)
 	end
 
+	local maxAngleTurnHead = 45
+	local turnHeadSpeed = 5
 	function ENT:Draw()
 		local bubble = self.bubble
 
@@ -281,8 +290,53 @@ else
 			bubble:SetRenderAngles(Angle(0, realTime * 100, 0))
 		end
 
+		-- because Initialize is only called when the player is here when the entity is created
+		if not self.headBoneID then
+			self.headBoneID = self:LookupBone("ValveBiped.Bip01_Head1")
+		end
+
+
+		if self.headBoneID and IsValid(self.targetedPlayer) then
+				local headPos = self:GetBonePosition(self.headBoneID)
+				local playerHeadPos = self.targetedPlayer:EyePos()
+				-- trace is too slow, can't use it
+
+			/*	local pos = self.targetedPlayer:GetPos()
+				local target = self:GetPos()
+				local targetX = target.x
+				local targetY = target.y
+				local Y = math.fmod(math.atan2(pos.y - targetY, pos.x - targetX), math.pi * 2)
+				local angle_2 = Angle(0, 0, math.deg(Y))
+				
+			
+
+			self:ManipulateBoneAngles(self.headBoneID, LerpAngle(FrameTime() * 15, originalAngle, angle_2))*/
+			local originalAngle = self:GetManipulateBoneAngles(self.headBoneID)
+			local _angle = (headPos-playerHeadPos):Angle() - self:GetAngles()
+
+			local angle = Angle(0,0,0)
+
+
+			angle:RotateAroundAxis(angle:Right(),0)
+			local y_angle = (_angle.y + 180) % 360
+			if y_angle > 360 - maxAngleTurnHead or y_angle < maxAngleTurnHead then
+				angle:RotateAroundAxis(angle:Forward(), y_angle)
+			else
+				angle:RotateAroundAxis(angle:Forward(), 0)
+			end
+
+			angle:RotateAroundAxis(angle:Up(),  _angle.p)
+			self:ManipulateBoneAngles(self.headBoneID, LerpAngle(FrameTime() * turnHeadSpeed, originalAngle, angle))
+
+		else
+			self:ManipulateBoneAngles(self.headBoneID, Angle(0,0,0))
+		end
+
+
 		self:DrawModel()
 	end
+
+	local radiusLook = 500
 
 	function ENT:Think()
 		local noBubble = self:GetNoBubble()
@@ -298,7 +352,23 @@ else
 			self.nextAnimCheck = CurTime() + 60
 		end
 
-		self:SetNextClientThink(CurTime() + 0.25)
+		local pos = self:GetPos()
+		local playerList = ents.FindInSphere(pos, radiusLook)
+		if not table.IsEmpty(playerList) then
+			local max = radiusLook * radiusLook
+			for k, v in ipairs(playerList) do
+				if not v:IsPlayer() then continue end
+				local dist = v:GetPos():DistToSqr(pos)
+				if dist < max then
+					self.targetedPlayer = v
+					max = dist
+				end
+			end
+		else
+			self.targetedPlayer = NULL
+		end
+
+		self:SetNextClientThink(CurTime() + 1)
 
 		return true
 	end
