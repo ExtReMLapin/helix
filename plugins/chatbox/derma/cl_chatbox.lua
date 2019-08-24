@@ -825,6 +825,191 @@ end
 
 vgui.Register("ixChatboxAutocompleteEntry", PANEL, "Panel")
 
+do
+	-- chatbox autocomplete arg preview
+	-- holds and displays similar commands based on the textentry
+	PANEL = {}
+	DEFINE_BASECLASS("Panel")
+
+	AccessorFunc(PANEL, "maxEntries", "MaxEntries", FORCE_NUMBER)
+
+	function PANEL:Init()
+		self:SetVisible(false, true)
+		self:SetMouseInputEnabled(true)
+
+		self.maxEntries = 20
+		self.currentAlpha = 0
+
+		self.previewIndex = 0 -- currently selected entry in command list
+		self.previews = {}
+		self.previewPanel = {}
+		self.type = nil
+	end
+
+	function PANEL:SetType(type)
+		self.type = type
+
+		--if type == ix.type.player or type == ix.type.character
+
+	end
+
+	function PANEL:GetPreviews()
+		return self.previews
+	end
+
+	function PANEL:IsOpen()
+		return self.bOpen
+	end
+
+	function PANEL:SetVisible(bValue, bForce)
+		LocalPlayer():ChatPrint("PANEL:SetVisible(bValue, bForce)")
+		if (bForce) then
+			BaseClass.SetVisible(self, bValue)
+			return
+		end
+
+		BaseClass.SetVisible(self, true) -- make sure this panel is visible during animation
+		self.bOpen = bValue
+
+		self:CreateAnimation(animationTime, {
+			index = 6,
+			target = {
+				currentAlpha = bValue and 255 or 0
+			},
+			easing = "outQuint",
+
+			Think = function(animation, panel)
+				panel:SetAlpha(math.ceil(panel.currentAlpha))
+			end,
+
+			OnComplete = function(animation, panel)
+				BaseClass.SetVisible(panel, bValue)
+
+				if (!bValue) then
+					self.previews = {}
+				end
+			end
+		})
+	end
+
+	function PANEL:Update(text)
+		--local previews = ix.command.FindAll(text, true, true, true)
+		local previews = {"preview 1", "preview caca lol", "preview 42yolo"}
+
+		self.previewIndex = 0 -- reset the command index because the command list could be different
+		self.previews = {}
+
+		for _, v in ipairs(self.previewPanel) do
+			v:Remove()
+		end
+
+		self.previewPanel = {}
+
+		local bSelected -- just to make sure we don't reset it during the loop for whatever reason
+
+		for k, v in ipairs(previews) do
+
+			local panel = self:Add("ixChatboxPreviewEntry")
+			panel:SetPreview(v)
+
+			if (!bSelected and text:lower() == v) then
+				panel:SetHighlighted(true)
+
+				self.previewIndex = k
+				bSelected = true
+			end
+
+			self.previewPanel[k] = panel
+			self.previews[k] = v
+
+			if (k == self.maxEntries) then
+				break
+			end
+
+
+		end
+	end
+
+	-- selects the next entry in the autocomplete if possible and returns the text that should replace the textentry
+	function PANEL:SelectNext()
+		-- wrap back to beginning if we're past the end
+		if (self.previewIndex == #self.previews) then
+			self.previewIndex = 1
+		else
+			self.previewIndex = self.previewIndex + 1
+		end
+
+		for _, v in ipairs(self.previewPanel) do
+			if (k == self.previewIndex) then
+				v:SetHighlighted(true)
+				self:ScrollToChild(v)
+			else
+				v:SetHighlighted(false)
+			end
+		end
+
+		return  self.previews[self.previewIndex]
+	end
+
+	function PANEL:Paint(width, height)
+		ix.util.DrawBlur(self)
+
+		surface.SetDrawColor(0, 0, 0, 200)
+		surface.DrawRect(0, 0, width, height)
+	end
+
+	vgui.Register("ixChatboxPreviewArg", PANEL, "DScrollPanel")
+
+
+	-- autocomplete preview
+	PANEL = {}
+
+	AccessorFunc(PANEL, "bSelected", "Highlighted", FORCE_BOOL)
+
+	function PANEL:Init()
+		self:Dock(TOP)
+
+		self.name = self:Add("DLabel")
+		self.name:Dock(TOP)
+		self.name:DockMargin(4, 4, 0, 0)
+		self.name:SetContentAlignment(4)
+		self.name:SetFont("ixGenericFont")
+		self.name:SetTextColor(ix.config.Get("color"))
+		self.name:SetExpensiveShadow(1, color_black)
+		self.highlightAlpha = 0
+	end
+
+	function PANEL:SetHighlighted(bValue)
+		self:CreateAnimation(animationTime * 2, {
+			index = 7,
+			target = {highlightAlpha = bValue and 1 or 0},
+			easing = "outQuint"
+		})
+
+		self.bHighlighted = true
+	end
+
+	function PANEL:SetPreview(data)
+		self.name:SetText(data)
+		self:SizeToContents()
+		self.command = command
+	end
+
+	function PANEL:SizeToContents()
+		local _, height = self.name:GetContentSize()
+
+		self.name:SetTall(height)
+
+		self:SetTall(self.name:GetTall() + 8)
+	end
+
+	function PANEL:Paint(width, height)
+		derma.SkinFunc("PaintChatboxAutocompleteEntry", self, width, height)
+	end
+
+	vgui.Register("ixChatboxPreviewEntry", PANEL, "Panel")
+end
+
 -- main chatbox panel
 -- this contains the text entry, tab sheets, and callbacks for other panel events
 PANEL = {}
@@ -856,6 +1041,8 @@ function PANEL:Init()
 	self.preview:Dock(BOTTOM)
 	self.preview:SetTargetHeight(self.entry:GetTall())
 
+
+
 	self.tabs = self:Add("ixChatboxTabs")
 	self.tabs:Dock(FILL)
 	self.tabs.OnTabChanged = ix.util.Bind(self, self.OnTabChanged)
@@ -864,6 +1051,12 @@ function PANEL:Init()
 	self.autocomplete:Dock(FILL)
 	self.autocomplete:DockMargin(4, 3, 4, 4) -- top margin is 3 to account for tab 1px border
 	self.autocomplete:SetZPos(3)
+
+	self.previewArg = self.tabs:Add("ixChatboxPreviewArg")
+	self.previewArg:Dock(FILL)
+	self.previewArg:DockMargin(4, 3, 4, 4) -- top margin is 3 to account for tab 1px border
+	self.previewArg:SetZPos(3)
+
 
 	self.alpha = 0
 	self:SetActive(false)
@@ -930,8 +1123,10 @@ function PANEL:SetActive(bActive)
 
 		self.autocomplete:SetVisible(false)
 		self.preview:SetVisible(false)
+		self.previewArg:SetVisible(false)
 		self.entry:SetText("")
 		self.preview:SetCommand("")
+		self.previewArg:Update("")
 		self.prefix:SetText(hook.Run("GetChatPrefixInfo", ""))
 
 		CloseDermaMenus()
@@ -1154,8 +1349,8 @@ end
 -- called when the textentry value changes
 function PANEL:OnTextChanged(text)
 	hook.Run("ChatTextChanged", text)
-
 	local preview = self.preview
+	local previewArg = self.previewArg
 	local autocomplete = self.autocomplete
 	local chatClassCommand = self:GetTextEntryChatClass(text)
 
@@ -1166,6 +1361,8 @@ function PANEL:OnTextChanged(text)
 		preview:SetVisible(true)
 		preview:UpdateArguments(text)
 
+		previewArg:Update("in one")
+		previewArg:SetVisible(true)
 		autocomplete:SetVisible(false)
 		return
 	end
@@ -1179,6 +1376,9 @@ function PANEL:OnTextChanged(text)
 		preview:SetVisible(true)
 		preview:UpdateArguments(text)
 
+		previewArg:Update("in two")
+		previewArg:SetVisible(true)
+
 		-- we don't need the autocomplete because we have a command already typed out
 		autocomplete:SetVisible(false)
 		return
@@ -1187,6 +1387,7 @@ function PANEL:OnTextChanged(text)
 		command = text:match("(/(%w+))") or "/"
 
 		preview:SetVisible(false) -- we don't have a valid command yet
+		previewArg:SetVisible(false)
 		autocomplete:Update(command:sub(2))
 		autocomplete:SetVisible(true)
 
@@ -1196,6 +1397,8 @@ function PANEL:OnTextChanged(text)
 	if (preview:GetCommand() != "") then
 		preview:SetCommand("")
 		preview:SetVisible(false)
+		previewArg:Update("in three")
+		previewArg:SetVisible(false)
 	end
 
 	if (autocomplete:IsVisible()) then
@@ -1326,3 +1529,5 @@ function PANEL:AddMessage(...)
 end
 
 vgui.Register("ixChatbox", PANEL, "EditablePanel")
+
+PLUGIN.CreateChat(PLUGIN)

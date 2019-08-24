@@ -1,4 +1,7 @@
 
+local botNames = {"Bob Good","Bob Neutral", "Bob Evil", "Bob Lawful", "Gordon Freeman", "Conna Wiles", "Bob Denard"}
+
+
 function GM:PlayerInitialSpawn(client)
 	client.ixJoinTime = RealTime()
 
@@ -8,7 +11,7 @@ function GM:PlayerInitialSpawn(client)
 		local faction = ix.faction.indices[index]
 
 		local character = ix.char.New({
-			name = client:Name(),
+			name = table.Random(botNames),
 			faction = faction and faction.uniqueID or "unknown",
 			model = faction and table.Random(faction:GetModels(client)) or "models/gman.mdl"
 		}, botID, client, client:SteamID64())
