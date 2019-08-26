@@ -559,7 +559,19 @@ function mysql:RawQuery(query, callback, flags, ...)
 		queryObj:start();
 	elseif (self.module == "sqlite") then
 		local result = sql.Query(query);
+		if istable(result) then
+			for k, v in pairs(result) do
+				for k2, v2 in pairs(v) do
+					if k2 == "data" then continue end
+					if not isstring(v2) then continue end
+					if string.find(v2, "\'\'",1,true) then
+						print("fixed ", v2, "to", string.Replace(v2, "\'\'", "\'"))
+						v[k2] = string.Replace(v2, "\'\'", "\'")
+					end
 
+				end
+			end
+		end
 		if (result == false) then
 			error(string.format("[mysql] SQL Query Error!\nQuery: %s\n%s\n", query, sql.LastError()));
 		else
